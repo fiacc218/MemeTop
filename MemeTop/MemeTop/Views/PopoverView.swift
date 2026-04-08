@@ -22,7 +22,7 @@ struct PopoverView: View {
                 .opacity(viewModel.isLoading ? 0.5 : 1)
 
                 Button(action: { floatingController.toggle() }) {
-                    Image(systemName: floatingController.isVisible ? "pip.fill" : "pip")
+                    Image(systemName: floatingController.isVisible ? "pin.fill" : "pin")
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
