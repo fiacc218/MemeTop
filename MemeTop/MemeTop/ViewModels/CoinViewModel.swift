@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import Network
 
 @MainActor
 class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
@@ -33,6 +34,8 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
     private var scrollTimer: Timer?
     private var searchTask: Task<Void, Never>?
     private var geckoBackoffUntil: Date?
+    private let networkMonitor = NWPathMonitor()
+    private nonisolated(unsafe) var lastPathStatus: NWPath.Status?
 
     // Binance symbol -> CoinGecko id
     private let binanceToGeckoId: [String: String] = [
@@ -124,6 +127,22 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
             self.geckoBackoffUntil = nil
             self.startRefreshing()
         }
+
+        // Refresh when network connectivity recovers
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let previous = self.lastPathStatus
+            self.lastPathStatus = path.status
+            // Only trigger refresh when transitioning to satisfied
+            if path.status == .satisfied && previous != .satisfied {
+                Task { @MainActor in
+                    self.geckoBackoffUntil = nil
+                    self.errorMessage = nil
+                    self.startRefreshing()
+                }
+            }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "net.memetop.monitor"))
     }
 
     func startScrolling() {
