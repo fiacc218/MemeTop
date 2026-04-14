@@ -189,22 +189,39 @@ struct FloatingTickerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Stale data warning bar
+            if viewModel.isDataStale {
+                HStack(spacing: 2) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 7))
+                    Text("STALE")
+                        .font(.system(size: 7, weight: .bold, design: .monospaced))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
+                .background(Color.red.opacity(0.8))
+            }
+
             ForEach(viewModel.coins) { coin in
+                let stale = viewModel.isDataStale
                 HStack(spacing: 0) {
                     Rectangle()
-                        .fill(coin.isUp ? Theme.floatUp : Theme.floatDown)
+                        .fill(stale ? Color.gray : (coin.isUp ? Theme.floatUp : Theme.floatDown))
                         .frame(width: 2)
                     Text(coin.symbol)
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(stale ? .gray : .primary)
                         .padding(.leading, 3)
                     Spacer()
                     if controller.showPrice {
                         Text(coin.source == .dexscreener ? (coin.mcFormatted ?? "-") : coin.priceFormatted)
                             .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundColor(stale ? .gray : .primary)
                     } else {
                         Text(coin.changeFormatted)
                             .font(.system(size: 10, weight: .medium, design: .monospaced))
-                            .foregroundColor(coin.isUp ? Theme.floatUp : Theme.floatDown)
+                            .foregroundColor(stale ? .gray : (coin.isUp ? Theme.floatUp : Theme.floatDown))
                     }
                 }
                 .frame(height: 18)

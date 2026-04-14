@@ -10,6 +10,12 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
     @Published var searchResults: [WatchlistItem] = []
     @Published var isSearching = false
     @Published var showSettings = false
+    @Published var lastUpdated: Date?
+
+    var isDataStale: Bool {
+        guard let lastUpdated else { return true }
+        return Date().timeIntervalSince(lastUpdated) > 60
+    }
 
     @AppStorage("refreshInterval") var refreshInterval: Double = 30
     @AppStorage("menuBarCoinId") var menuBarCoinId: String = "ethereum"
@@ -45,7 +51,7 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
         get {
             guard let data = UserDefaults.standard.data(forKey: "watchlist"),
                   let items = try? JSONDecoder().decode([WatchlistItem].self, from: data) else {
-                return defaultWatchlist
+                return Self.loadWatchlistFromFile() ?? defaultWatchlist
             }
             return items
         }
@@ -55,6 +61,40 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
             }
             objectWillChange.send()
         }
+    }
+
+    /// Load watchlist from ~/watchlist.json or project-relative watchlist.json
+    private static func loadWatchlistFromFile() -> [WatchlistItem]? {
+        let paths = [
+            NSHomeDirectory() + "/.memetop/watchlist.json",
+            NSHomeDirectory() + "/watchlist.json",
+        ]
+        struct FileConfig: Codable {
+            let watchlist: [FileItem]
+            struct FileItem: Codable {
+                let id: String
+                let symbol: String
+                let name: String
+                let contract: String?
+                let chain: String?
+                let notes: String?
+                let source: String
+            }
+        }
+        for path in paths {
+            guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+                  let config = try? JSONDecoder().decode(FileConfig.self, from: data) else {
+                continue
+            }
+            return config.watchlist.map {
+                WatchlistItem(
+                    id: $0.id, symbol: $0.symbol, name: $0.name,
+                    contract: $0.contract, chain: $0.chain, notes: $0.notes,
+                    source: $0.source == "dexscreener" ? .dexscreener : .coingecko
+                )
+            }
+        }
+        return nil
     }
 
     var menuBarText: String {
@@ -74,6 +114,16 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
         Task { await applyProxy() }
         startRefreshing()
         startScrolling()
+
+        // Refresh when waking from sleep
+        NotificationCenter.default.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.geckoBackoffUntil = nil
+            self.startRefreshing()
+        }
     }
 
     func startScrolling() {
@@ -112,6 +162,12 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
         }
     }
 
+    func forceRefresh() async {
+        geckoBackoffUntil = nil
+        errorMessage = nil
+        await fetchPrices()
+    }
+
     func fetchPrices() async {
         let list = watchlist
         guard !list.isEmpty else {
@@ -124,6 +180,8 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
 
         let geckoItems = list.filter { $0.source == .coingecko }
         let dexItems = list.filter { $0.source == .dexscreener }
+
+        let oldCoins = coins
 
         // Fetch both sources concurrently
         async let geckoCoins = fetchGeckoCoins(ids: geckoItems.map(\.id))
@@ -147,18 +205,30 @@ class CoinViewModel: ObservableObject, BinanceWebSocketDelegate {
             }
         }
 
-        coins = merged
+        if !merged.isEmpty {
+            coins = merged
+            if merged != oldCoins {
+                lastUpdated = Date()
+            }
+        }
+        // Always stop loading - show error state if no data
+        if coins.isEmpty && errorMessage == nil {
+            errorMessage = "Unable to fetch data. Check your network."
+        }
         isLoading = false
     }
 
     private func fetchGeckoCoins(ids: [String]) async -> [Coin] {
         guard !ids.isEmpty else { return [] }
-        // Skip if rate limited and still in backoff
-        if let backoff = geckoBackoffUntil, Date() < backoff {
-            let remaining = Int(backoff.timeIntervalSinceNow)
-            errorMessage = "CoinGecko: rate limited, retry in \(remaining)s"
-            // Return existing CoinGecko coins so they stay visible
-            return coins.filter { $0.source == .coingecko }
+        // Auto-clear expired backoff
+        if let backoff = geckoBackoffUntil {
+            if Date() >= backoff {
+                geckoBackoffUntil = nil
+            } else {
+                let remaining = Int(backoff.timeIntervalSinceNow)
+                errorMessage = "CoinGecko: rate limited, retry in \(remaining)s"
+                return coins.filter { $0.source == .coingecko }
+            }
         }
         do {
             let result = try await geckoService.fetchPrices(ids: ids)

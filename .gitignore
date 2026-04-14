@@ -11,6 +11,9 @@ xcuserdata/
 *.xccheckout
 *.moved-aside
 
+# Personal config
+watchlist.json
+
 # macOS
 .DS_Store
 .AppleDouble

@@ -13,7 +13,7 @@ struct PopoverView: View {
                     .font(.system(.headline, design: .rounded, weight: .bold))
                 Spacer()
                 Button(action: {
-                    Task { await viewModel.fetchPrices() }
+                    Task { await viewModel.forceRefresh() }
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12))
@@ -64,7 +64,7 @@ struct PopoverView: View {
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                         Button("Retry") {
-                            Task { await viewModel.fetchPrices() }
+                            Task { await viewModel.forceRefresh() }
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(.accentColor)
@@ -89,7 +89,7 @@ struct PopoverView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(viewModel.coins) { coin in
-                                CoinRowView(coin: coin)
+                                CoinRowView(coin: coin, isStale: viewModel.isDataStale)
                                 Divider().opacity(0.3)
                             }
                         }
@@ -110,9 +110,7 @@ struct PopoverView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 } else {
-                    Text("CoinGecko + Binance")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                    TimeAgoView(date: viewModel.lastUpdated, isStale: viewModel.isDataStale)
                 }
                 Spacer()
                 Button("Quit") {
@@ -125,5 +123,34 @@ struct PopoverView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
+    }
+}
+
+struct TimeAgoView: View {
+    let date: Date?
+    let isStale: Bool
+    @State private var now = Date()
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 3) {
+            if isStale {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 9))
+                    .foregroundColor(.orange)
+            }
+            Text(text)
+                .font(.system(size: 10))
+                .foregroundColor(isStale ? .orange : .secondary)
+        }
+        .onReceive(timer) { now = $0 }
+    }
+
+    private var text: String {
+        guard let date else { return "loading..." }
+        let seconds = Int(now.timeIntervalSince(date))
+        if seconds < 5 { return "just now" }
+        if seconds < 60 { return "\(seconds)s ago" }
+        return "\(seconds / 60)m ago"
     }
 }

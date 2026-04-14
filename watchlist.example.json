@@ -1,0 +1,31 @@
+{
+  "watchlist": [
+    {
+      "id": "bitcoin",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "source": "coingecko"
+    },
+    {
+      "id": "ethereum",
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "source": "coingecko"
+    },
+    {
+      "id": "solana",
+      "symbol": "SOL",
+      "name": "Solana",
+      "source": "coingecko"
+    },
+    {
+      "id": "0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b",
+      "symbol": "VIRTUAL",
+      "name": "Virtuals Protocol",
+      "contract": "0x0b3e328455c4059eeb9e3f84b5543f74e24e7e1b",
+      "chain": "Base",
+      "notes": "AI Agent platform",
+      "source": "dexscreener"
+    }
+  ]
+}
